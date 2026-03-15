@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Rectangular Prism Visualization</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #e0e5ec; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+        }
+        #canvas-container { 
+            width: 100vw; 
+            height: 100vh; 
+        }
+        .label {
+            color: #111;
+            font-size: 18px;
+            font-weight: bold;
+            pointer-events: none;
+            text-shadow: 2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff;
+        }
+        .angle-label {
+            color: #0000ff;
+            font-size: 16px;
+            font-weight: bold;
+            pointer-events: none;
+            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+        }
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            max-width: 380px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        h2 { 
+            margin-top: 0; 
+            font-size: 1.3rem; 
+            color: #222; 
+        }
+        ul { 
+            padding-left: 20px; 
+            margin-bottom: 0; 
+            color: #444; 
+            font-size: 1rem; 
+        }
+        li { 
+            margin-bottom: 8px; 
+            line-height: 1.4;
+        }
+        .highlight { 
+            font-weight: bold; 
+            color: #d00000; 
+        }
+        .translated {
+            font-weight: bold;
+            color: #008800;
+        }
+        .instruction { 
+            margin-top: 15px; 
+            font-style: italic; 
+            font-size: 0.85rem; 
+            color: #666; 
+            text-align: center;
+        }
+        @media (max-width: 600px) {
+            #info-panel { 
+                top: 10px; 
+                left: 10px; 
+                right: 10px; 
+                max-width: none; 
+                padding: 10px 15px; 
+            }
+            ul { font-size: 0.9rem; }
+            h2 { font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div id="info-panel">
+        <h2>Rectangular Prism ABCD.A'B'C'D'</h2>
+        <ul>
+            <li>Base ABCD is a rectangle</li>
+            <li>AC = 2AB &rarr; &ang;BAC = 60&deg;</li>
+            <li>Angle between <span class="highlight">AD</span> and <span class="highlight">A'B'</span>:<br> 
+                Since A'B' &parallel; AB, angle is &ang;DAB = 90&deg;</li>
+            <li>Angle between <span class="highlight">A'B'</span> and <span class="highlight">AC</span>:<br>
+                Since A'B' &parallel; AB, angle is &ang;BAC = 60&deg;</li>
+        </ul>
+        <div class="instruction">Drag to rotate &bull; Scroll to zoom &bull; Pinch to zoom</div>
+    </div>
+    <div id="canvas-container"></div>
+
+    <!-- Three.js and dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
+    
+    <script>
+        // Set up scene, camera, renderer
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        // Light background matching CSS
+        scene.background = new THREE.Color(0xe0e5ec);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
+        // Position camera to give a good isometric-like view
+        camera.position.set(96, 96, 120);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        // CSS2DRenderer for crisp HTML labels
+        const labelRenderer = new THREE.CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        container.appendChild(labelRenderer.domElement);
+
+        // OrbitControls for interactivity
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 0, 0);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // Prism dimensions based on mathematical constraints
+        const a = 32; // AB length
+        const b = 32 * Math.sqrt(3); // AD length (since AC = 2AB, AC^2 = a^2 + b^2 => 4a^2 = a^2 + b^2 => b = a*sqrt(3))
+        const h = 40; // Height of the prism
+
+        // Vertices definitions
+        const v = {
+            A: new THREE.Vector3(-a/2, -h/2, b/2),
+            B: new THREE.Vector3(a/2, -h/2, b/2),
+            C: new THREE.Vector3(a/2, -h/2, -b/2),
+            D: new THREE.Vector3(-a/2, -h/2, -b/2),
+            A_prime: new THREE.Vector3(-a/2, h/2, b/2),
+            B_prime: new THREE.Vector3(a/2, h/2, b/2),
+            C_prime: new THREE.Vector3(a/2, h/2, -b/2),
+            D_prime: new THREE.Vector3(-a/2, h/2, -b/2),
+        };
+
+        // Transparent Box Object
+        const boxGeo = new THREE.BoxGeometry(a, h, b);
+        const boxMat = new THREE.MeshPhysicalMaterial({
+            color: 0x99ccff,
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const box = new THREE.Mesh(boxGeo, boxMat);
+        scene.add(box);
+
+        // Box edges (thin dark lines for all edges)
+        const edgesGeo = new THREE.EdgesGeometry(boxGeo);
+        const edgesMat = new THREE.LineBasicMaterial({ color: 0x445566, linewidth: 1 });
+        const boxEdges = new THREE.LineSegments(edgesGeo, edgesMat);
+        scene.add(boxEdges);
+
+        // Utility function to draw thick cylindrical lines
+        function createThickLine(p1, p2, color, thickness = 0.05) {
+            const path = new THREE.LineCurve3(p1, p2);
+            const tubeGeo = new THREE.TubeGeometry(path, 20, thickness, 8, false);
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            return new THREE.Mesh(tubeGeo, mat);
+        }
+
+        // Highlight specfic required lines in bold RED
+        const redColor = 0xd00000;
+        scene.add(createThickLine(v.A, v.D, redColor, 0.56));       // AD
+        scene.add(createThickLine(v.A_prime, v.B_prime, redColor, 0.56)); // A'B'
+        scene.add(createThickLine(v.A, v.C, redColor, 0.56));       // AC
+        
+        // Add AB as a GREEN line to visualize the parallel vector translation of A'B'
+        const greenColor = 0x00aa00;
+        scene.add(createThickLine(v.A, v.B, greenColor, 0.40));
+
+        // Angle marks and arcs removed as requested
+
+        // Utility to add textual labels to 3D space
+        function createLabel(text, position, offset, className='label') {
+            const div = document.createElement('div');
+            div.className = className;
+            div.innerHTML = text;
+            const label = new THREE.CSS2DObject(div);
+            label.position.copy(position);
+            if (offset) label.position.add(offset);
+            scene.add(label);
+        }
+
+        // Add Vertex Labels
+        const offsetAmt = 3.2;
+        createLabel('A', v.A, new THREE.Vector3(-offsetAmt, -offsetAmt, offsetAmt));
+        createLabel('B', v.B, new THREE.Vector3(offsetAmt, -offsetAmt, offsetAmt));
+        createLabel('C', v.C, new THREE.Vector3(offsetAmt, -offsetAmt, -offsetAmt));
+        createLabel('D', v.D, new THREE.Vector3(-offsetAmt, -offsetAmt, -offsetAmt));
+        createLabel("A'", v.A_prime, new THREE.Vector3(-offsetAmt, offsetAmt, offsetAmt));
+        createLabel("B'", v.B_prime, new THREE.Vector3(offsetAmt, offsetAmt, offsetAmt));
+        createLabel("C'", v.C_prime, new THREE.Vector3(offsetAmt, offsetAmt, -offsetAmt));
+        createLabel("D'", v.D_prime, new THREE.Vector3(-offsetAmt, offsetAmt, -offsetAmt));
+
+        // Main animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Update orbit controls
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle browser resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
